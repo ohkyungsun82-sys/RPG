@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Web RPG</title>
+  <style>
+    body { margin: 0; background: #1a1a1a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; user-select: none; }
+    canvas { background: #2c3e50; border: 3px solid #ecf0f1; border-radius: 4px; }
+    .info { margin-bottom: 10px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="info">이동: WASD / 방향키 | 공격: 스페이스바</div>
+  <canvas id="game" width="800" height="600"></canvas>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let state = { players: {}, monsters: {} };
+    let effects = [];
+    const keys = {};
+
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+      if (e.code === 'Space' && !e.repeat) socket.emit('attack');
+    });
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    socket.on('state', data => state = data);
+    socket.on('effect', pos => effects.push({ x: pos.x, y: pos.y, r: 15, alpha: 1 }));
+
+    setInterval(() => {
+      let dx = 0, dy = 0;
+      if (keys['ArrowUp'] || keys['KeyW']) dy -= 1;
+      if (keys['ArrowDown'] || keys['KeyS']) dy += 1;
+      if (keys['ArrowLeft'] || keys['KeyA']) dx -= 1;
+      if (keys['ArrowRight'] || keys['KeyD']) dx += 1;
+      if (dx !== 0 || dy !== 0) socket.emit('move', { dx, dy });
+    }, 1000 / 30);
+
+    function draw() {
+      ctx.clearRect(0, 0, 800, 600);
+
+      for (let id in state.monsters) {
+        const m = state.monsters[id];
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(m.x - 15, m.y - 15, 30, 30);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(m.x - 15, m.y - 25, 30, 5);
+        ctx.fillStyle = '#2ecc71';
+        ctx.fillRect(m.x - 15, m.y - 25, (m.hp / m.maxHp) * 30, 5);
+      }
+
+      for (let id in state.players) {
+        const p = state.players[id];
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = id === socket.id ? '#fff' : '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
+        ctx.fillStyle = '#2ecc71';
+        ctx.fillRect(p.x - 20, p.y - 30, (p.hp / p.maxHp) * 40, 5);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Lv.${p.lv} (${p.exp}/${p.lv * 50})`, p.x, p.y - 35);
+      }
+
+      for (let i = effects.length - 1; i >= 0; i--) {
+        const ef = effects[i];
+        ctx.strokeStyle = `rgba(241, 196, 15, ${ef.alpha})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ef.r += 4;
+        ef.alpha -= 0.1;
+        if (ef.alpha <= 0) effects.splice(i, 1);
+      }
+
+      requestAnimationFrame(draw);
+    }
+    draw();
+  </script>
+</body>
+</html>
